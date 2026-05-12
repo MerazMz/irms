@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
+    // console.log("Reservation API HIT");
     try {
         const body = await req.json(); //fetch the request body
         const { productId, warehouseId, quantity } = body; //destructure it 
@@ -28,24 +29,61 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Insufficient Stock" }, { status: 409 });
         }
 
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);//for 10 min
+        
 
-        const reservation = await prisma.reservation.create({
-            data: {
-                productId,
-                warehouseId,
-                quantity,
-                expiresAt,
+        const reservation = await prisma.$transaction(async(tx)=>{
+            const inventory = await tx.$queryRaw<any[]>`
+            SELECT * FROM "Inventory" WHERE "productId"=${productId}
+            AND "warehouseId"=${warehouseId} FOR UPDATE
+            `;
+            if(inventory.length===0){
+                throw new Error("Inventory not found");
             }
+            const item = inventory[0];
+            const availableStock = item.totalUnits-item.reservedUnits;
+            // console.log(item);
+            if(availableStock<quantity){
+                throw new Error("Insufficient Stock");
+            }
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000);//for 10 min
+            const reservation = await tx.reservation.create({
+                data:{
+                    productId,
+                    warehouseId,
+                    quantity,
+                    expiresAt
+                }
+            })
+            await tx.inventory.update({
+                where:{id:item.id},
+                data:{reservedUnits:{increment:quantity}}
+            })
+            return reservation;
         })
-        await prisma.inventory.update({
-            where: { id: inventory.id, },
-            data: { reservedUnits: { increment: quantity, } }
-        });
+
+        // const reservation = await prisma.reservation.create({
+        //     data: {
+        //         productId,
+        //         warehouseId,
+        //         quantity,
+        //         expiresAt,
+        //     }
+        // // })
+        // await prisma.inventory.update({
+        //     where: { id: inventory.id, },
+        //     data: { reservedUnits: { increment: quantity, } }
+        // });
         return NextResponse.json({ messsage: "Reservation created", reservation }, { status: 201 })
     
     }catch(error){
-        console.log(error);
+        if(error instanceof Error){
+            if(error.message=="Inventory not found"){
+                return NextResponse.json({error:error.message},{status:404})
+            }
+            if(error.message=="Insufficient Stock"){
+                return NextResponse.json({error:error.message},{status:409})
+            }
+        }
         return NextResponse.json({error:"Internal server error"},{status:500})
         
     }
