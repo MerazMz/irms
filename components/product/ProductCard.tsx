@@ -150,7 +150,7 @@ export function ProductCard({
         {/* Footer */}
         <CardFooter className="pt-2">
           <Button
-            className="w-full cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all duration-200"
+            className="w-full cursor-pointer hover:text-green-500 hover:scale-[1.02] hover:shadow-md transition-all duration-100"
             disabled={totalStock === 0}
             onClick={() => setShowModal(true)}
           >

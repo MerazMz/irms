@@ -112,8 +112,8 @@ export function ReservationModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={onOpenChange} >
+      <DialogContent className="sm:max-w-[425px] outline-gray-500">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingCart className="size-5 text-primary" />
@@ -183,15 +183,15 @@ export function ReservationModal({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
+        <DialogFooter className="gap-4 sm:gap-0">
+          <Button className="cursor-pointer hover:text-red-500"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isLoading}
           >
             No, Cancel
           </Button>
-          <Button onClick={handleReserve} disabled={isLoading || !selectedWarehouseId} className="hover:text-green-500 hover:text-green-400 transition-colors duration-100 hover:outline-white hover:outline-1">
+          <Button onClick={handleReserve} disabled={isLoading || !selectedWarehouseId} variant="outline" className="ml-5 cursor-pointer hover:text-green-500">
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />

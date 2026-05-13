@@ -8,6 +8,8 @@ A robust, real-time inventory management system built with **Next.js 16**, **Pri
 
 ```text
 irms/
+├── .github/
+│   └── workflows/            # GitHub Action for 5-min background cleanup
 ├── app/
 │   ├── api/
 │   │   ├── cleanup/          # Cron job endpoint for releasing expired stock
@@ -22,7 +24,10 @@ irms/
 │   ├── product/              # Product cards & reservation modals
 │   └── ui/                   # Reusable Shadcn UI primitives
 ├── lib/
+│   ├── api.ts                # API route helper utilities
+│   ├── idempotency.ts        # Redis-based idempotency logic
 │   ├── prisma.ts             # Prisma Client singleton
+│   ├── redis.ts              # Upstash Redis client configuration
 │   ├── reservation.ts        # Shared reservation & cleanup utilities
 │   └── utils.ts              # Tailwind merging & helper functions
 ├── prisma/
