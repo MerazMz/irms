@@ -1,8 +1,10 @@
 import {prisma} from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
+import { releaseExpiredReservations } from "@/lib/reservation"
 
 export async function GET(req: NextRequest,{params}: {params: Promise<{id: string}>}){
     try{
+        await releaseExpiredReservations();
         const {id} = await params;
         const reservation = await prisma.reservation.findUnique({
             where:{id},
