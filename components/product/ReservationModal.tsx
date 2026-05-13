@@ -45,6 +45,14 @@ export function ReservationModal({
   })
   const [quantity, setQuantity] = React.useState<number>(1)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [idempotencyKey, setIdempotencyKey] = React.useState<string>("")
+
+  // Generate a new idempotency key whenever the modal is opened
+  React.useEffect(() => {
+    if (open) {
+      setIdempotencyKey(crypto.randomUUID())
+    }
+  }, [open])
 
   const selectedInventory = availableInventories.find(
     (inv) => inv.warehouse.id === selectedWarehouseId
@@ -65,6 +73,7 @@ export function ReservationModal({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
         },
         body: JSON.stringify({
           productId: product.id,

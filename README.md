@@ -87,23 +87,44 @@ This ensures that the database "locks" the specific inventory row for one user u
 
 ---
 
-## ⏲️ Expiry Mechanism & Background Workers
+---
 
-Reservations are valid for **10 minutes**. To ensure stock is released accurately on a free tier, the system uses a robust **Triple-Layer Cleanup** strategy:
+## ⚙️ The Expiry Lifecycle
 
-### 1. Lazy Cleanup (Real-Time Guard) - *Primary*
-To bypass server delays, the cleanup utility is triggered **on every relevant user interaction**. This ensures that even if no background worker has run, the user always sees fresh, accurate stock:
-- **Product Catalog**: Refreshes stock whenever a user views the dashboard.
-- **Checkout Page**: Verifies expiry the moment a user lands on the purchase page.
-- **New Reservations**: Clears expired locks before checking availability for a new request.
+To provide a fair experience, the system implements a **10-minute hold** on all reserved items. This prevents "phantom stock" issues where items are locked indefinitely by inactive users.
 
-### 2. GitHub Actions (Frequent Worker) - *Secondary*
-Since Vercel Hobby accounts limit cron jobs to once per day, we use **GitHub Actions** as a high-frequency background worker:
-- **Schedule**: Set to run every **5 minutes** (see `.github/workflows/cleanup.yml`).
-- **Function**: Automatically pings the `/api/cleanup` endpoint to sweep the database even when there is no user traffic.
+1.  **Creation**: When a user initiates a reservation, the system calculates `expiresAt` as `now + 10 minutes`.
+2.  **State Transition**: The reservation is created with a `PENDING` status, and the `reservedUnits` in the `Inventory` table is incremented.
+3.  **The Countdown**: On the frontend, a real-time timer compares the current time to the `expiresAt` timestamp. 
+4.  **Expiry**: If the timer hits zero or the user fails to confirm within the window, the reservation is considered "Expired."
+5.  **Release**: Once expired, the status transitions to `RELEASED`, and the `reservedUnits` are decremented, making the stock available to other shoppers immediately.
 
-### 3. Vercel Cron (Daily Sweep) - *Fallback*
-A standard Vercel Cron job is configured in `vercel.json` to run once every 24 hours as a final fallback to comply with Hobby tier restrictions.
+---
+
+## 🧹 Automatic Cleanup Implementation
+
+The cleanup system is the "engine" that keeps the inventory accurate. It uses a **Triple-Layer** approach to ensure reliability even on free hosting tiers:
+
+### 1. Lazy Cleanup (Just-in-Time)
+This is the most critical layer. Instead of waiting for a background worker, the system performs a "mini-cleanup" during every read/write operation:
+- **`GET /api/products`**: Before showing the catalog, the system runs `releaseExpiredReservations()`.
+- **`POST /api/reservations`**: Before checking if stock is available, it clears out any stale reservations that might be "hogging" the stock.
+- **Implementation**:
+  ```typescript
+  // Finds PENDING reservations where expiresAt < now
+  const expired = await prisma.reservation.findMany({
+    where: { status: "PENDING", expiresAt: { lt: new Date() } }
+  });
+  ```
+
+### 2. GitHub Actions (The Pulse)
+To maintain data integrity during periods of low traffic, a GitHub Action ([.github/workflows/cleanup.yml](.github/workflows/cleanup.yml)) pings the `/api/cleanup` endpoint every **5 minutes**. This acts as a consistent heartbeat for the system.
+
+### 3. Vercel Cron (The Fallback)
+A final fallback is configured in `vercel.json` to run a daily sweep. This ensures that even if external services are down, the database is scrubbed at least once every 24 hours.
+
+### 🔒 Atomic Transactions
+All cleanup operations are wrapped in **Prisma Transactions**. This ensures that the inventory increment and the reservation status update happen **atomically**—either both succeed or both fail, preventing "leaked" stock numbers.
 
 ---
 

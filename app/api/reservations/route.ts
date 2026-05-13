@@ -1,10 +1,28 @@
 import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 import { releaseExpiredReservations } from "@/lib/reservation"
+import { 
+  getOrLockIdempotency, 
+  saveIdempotency, 
+  deleteIdempotency 
+} from "@/lib/idempotency"
 
 export async function POST(req: NextRequest) {
-    // console.log("Reservation API HIT");
+    const idempotencyKey = req.headers.get("idempotency-key");
+    const namespace = "reserve";
+
     try {
+        // 1. Idempotency Check
+        if (idempotencyKey) {
+            const cached = await getOrLockIdempotency(namespace, idempotencyKey);
+            if (cached) {
+                if (cached.state === "PROCESSING") {
+                    return NextResponse.json({ error: "Request already in progress" }, { status: 425 });
+                }
+                return NextResponse.json(cached.body, { status: cached.status });
+            }
+        }
+
         // Cleanup expired reservations before checking stock
         await releaseExpiredReservations();
 
@@ -13,10 +31,12 @@ export async function POST(req: NextRequest) {
 
         //validation on incomplete request
         if (!productId || !warehouseId || !quantity) {
+            if (idempotencyKey) await deleteIdempotency(namespace, idempotencyKey);
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
         if (quantity <= 0) {
+            if (idempotencyKey) await deleteIdempotency(namespace, idempotencyKey);
             return NextResponse.json({ error: "Quantity must be greater than 0" }, { status: 400 });
         }
 
@@ -24,16 +44,16 @@ export async function POST(req: NextRequest) {
             where: { productId, warehouseId },
         })
         if (!inventory) {
+            if (idempotencyKey) await deleteIdempotency(namespace, idempotencyKey);
             return NextResponse.json({ error: "Inventory not found" }, { status: 404 });
         }
         // formula = available = total-reserve
         const availableStock = inventory.totalUnits - inventory.reservedUnits;
 
         if (availableStock < quantity) {
+            if (idempotencyKey) await deleteIdempotency(namespace, idempotencyKey);
             return NextResponse.json({ error: "Insufficient Stock" }, { status: 409 });
         }
-
-        
 
         const reservation = await prisma.$transaction(async(tx)=>{
             const inventory = await tx.$queryRaw<any[]>`
@@ -45,7 +65,7 @@ export async function POST(req: NextRequest) {
             }
             const item = inventory[0];
             const availableStock = item.totalUnits-item.reservedUnits;
-            // console.log(item);
+            
             if(availableStock<quantity){
                 throw new Error("Insufficient Stock");
             }
@@ -65,21 +85,19 @@ export async function POST(req: NextRequest) {
             return reservation;
         })
 
-        // const reservation = await prisma.reservation.create({
-        //     data: {
-        //         productId,
-        //         warehouseId,
-        //         quantity,
-        //         expiresAt,
-        //     }
-        // // })
-        // await prisma.inventory.update({
-        //     where: { id: inventory.id, },
-        //     data: { reservedUnits: { increment: quantity, } }
-        // });
-        return NextResponse.json({ message: "Reservation created", reservation }, { status: 201 })
+        const successResponse = { message: "Reservation created", reservation };
+        
+        // 2. Save Idempotency
+        if (idempotencyKey) {
+            await saveIdempotency(namespace, idempotencyKey, 201, successResponse);
+        }
+
+        return NextResponse.json(successResponse, { status: 201 })
     
-    }catch(error){
+    } catch(error){
+        // 3. Handle Error & Release Lock
+        if (idempotencyKey) await deleteIdempotency(namespace, idempotencyKey);
+
         if(error instanceof Error){
             if(error.message=="Inventory not found"){
                 return NextResponse.json({error:error.message},{status:404})
@@ -89,7 +107,6 @@ export async function POST(req: NextRequest) {
             }
         }
         return NextResponse.json({error:"Internal server error"},{status:500})
-        
     }
 }
 

@@ -55,6 +55,9 @@ export function CheckoutPage({ reservation: initialReservation }: CheckoutPagePr
   const [isExpired, setIsExpired] = React.useState(false)
   const [isProcessing, setIsProcessing] = React.useState(false)
 
+  // Generate a stable idempotency key for this confirmation attempt
+  const idempotencyKey = React.useMemo(() => crypto.randomUUID(), [initialReservation.id])
+
   // Countdown timer logic
   React.useEffect(() => {
     if (reservation.status !== "PENDING") return
@@ -89,7 +92,10 @@ export function CheckoutPage({ reservation: initialReservation }: CheckoutPagePr
     const endpoint = `/api/reservations/${reservation.id}/${action}`
 
     try {
-      const response = await fetch(endpoint, { method: "POST" })
+      const response = await fetch(endpoint, { 
+        method: "POST",
+        headers: action === "confirm" ? { "Idempotency-Key": idempotencyKey } : {}
+      })
       const data = await response.json()
 
       if (!response.ok) {
