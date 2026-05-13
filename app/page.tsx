@@ -2,6 +2,8 @@ import { ProductCard } from "@/components/product/ProductCard";
 import { prisma } from "@/lib/prisma";
 import { releaseExpiredReservations } from "@/lib/reservation";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   // Automatically release expired stock whenever the page is loaded
   await releaseExpiredReservations();

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation"
 import { CheckoutPage } from "@/components/checkout/CheckoutPage"
 import { releaseExpiredReservations } from "@/lib/reservation"
 
+export const dynamic = "force-dynamic"
+
 interface PageProps {
   params: Promise<{ id: string }>
 }
