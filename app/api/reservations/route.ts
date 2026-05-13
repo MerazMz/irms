@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
+import { releaseExpiredReservations } from "@/lib/reservation"
 
 export async function POST(req: NextRequest) {
     // console.log("Reservation API HIT");
     try {
+        // Cleanup expired reservations before checking stock
+        await releaseExpiredReservations();
+
         const body = await req.json(); //fetch the request body
         const { productId, warehouseId, quantity } = body; //destructure it 
 
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
         //     where: { id: inventory.id, },
         //     data: { reservedUnits: { increment: quantity, } }
         // });
-        return NextResponse.json({ messsage: "Reservation created", reservation }, { status: 201 })
+        return NextResponse.json({ message: "Reservation created", reservation }, { status: 201 })
     
     }catch(error){
         if(error instanceof Error){
