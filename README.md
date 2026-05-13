@@ -128,6 +128,27 @@ All cleanup operations are wrapped in **Prisma Transactions**. This ensures that
 
 ---
 
+## 🚀 Idempotency (Bonus Feature)
+
+The `reserve` and `confirm` endpoints are protected against duplicate requests (e.g., double-clicks or network retries) using **Upstash Redis**.
+
+- **Mechanism**: Clients can send a unique `Idempotency-Key` in the request header.
+- **Locking**: We use a Redis "NX" lock to handle requests in a `PROCESSING` state, preventing race conditions if two identical requests arrive simultaneously.
+- **Persistence**: Successful responses are cached in Redis for **24 hours**. Subsequent requests with the same key will receive the original response instantly without re-executing any business logic (like double-decrementing stock).
+
+---
+
+## ⚖️ Trade-offs & Future Improvements
+
+Given the focus on concurrency and reliability, some trade-offs were made:
+
+1.  **Polling vs. WebSockets**: Currently, the UI refreshes state via `router.refresh()` and "Lazy Cleanup" on page load. In a larger production system, using WebSockets or Server-Sent Events (SSE) would provide even faster real-time stock updates across multiple open tabs.
+2.  **Schema Validation**: I chose to focus on the database transaction logic and concurrency over comprehensive schema validation. In a production environment, I would use **Zod** to strictly validate all API inputs and environment variables.
+3.  **Soft Deletes**: Currently, released reservations remain in the DB with a `RELEASED` status. For a high-scale system, a background process should eventually archive these records to keep the primary table lean.
+4.  **Automated Testing**: While the system was manually tested for concurrency (simulating simultaneous requests), adding a suite of unit tests (Vitest) and E2E tests (Playwright) would be the next step to ensure long-term stability.
+
+---
+
 ## 🛠️ Tech Stack
 - **Framework**: Next.js 16 (App Router + Turbopack)
 - **Database**: PostgreSQL (Supabase)
