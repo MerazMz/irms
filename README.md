@@ -87,20 +87,23 @@ This ensures that the database "locks" the specific inventory row for one user u
 
 ---
 
-## ⏲️ Expiry Mechanism & Vercel Cron
+## ⏲️ Expiry Mechanism & Background Workers
 
-Reservations are valid for **10 minutes**. Stock is released automatically using a dual-approach:
+Reservations are valid for **10 minutes**. To ensure stock is released accurately on a free tier, the system uses a robust **Triple-Layer Cleanup** strategy:
 
-### 1. Active Cleanup (Cron Job)
-Configured in `vercel.json`, Vercel hits the `/api/cleanup` endpoint every minute. This endpoint identifies all `PENDING` reservations where `expiresAt < now` and restores the `reservedUnits` back to `totalUnits`.
+### 1. Lazy Cleanup (Real-Time Guard) - *Primary*
+To bypass server delays, the cleanup utility is triggered **on every relevant user interaction**. This ensures that even if no background worker has run, the user always sees fresh, accurate stock:
+- **Product Catalog**: Refreshes stock whenever a user views the dashboard.
+- **Checkout Page**: Verifies expiry the moment a user lands on the purchase page.
+- **New Reservations**: Clears expired locks before checking availability for a new request.
 
-### 2. Lazy Cleanup (Just-in-Time)
-To ensure the UI is always accurate even between cron cycles, the cleanup utility is called during:
-- **Product Fetching**: Refreshes stock before the catalog is displayed.
-- **New Reservations**: Clears expired stock before checking availability.
+### 2. GitHub Actions (Frequent Worker) - *Secondary*
+Since Vercel Hobby accounts limit cron jobs to once per day, we use **GitHub Actions** as a high-frequency background worker:
+- **Schedule**: Set to run every **5 minutes** (see `.github/workflows/cleanup.yml`).
+- **Function**: Automatically pings the `/api/cleanup` endpoint to sweep the database even when there is no user traffic.
 
-### Security
-The `/api/cleanup` route is protected. In production, it requires a `Bearer ${CRON_SECRET}` header, which Vercel Cron sends automatically.
+### 3. Vercel Cron (Daily Sweep) - *Fallback*
+A standard Vercel Cron job is configured in `vercel.json` to run once every 24 hours as a final fallback to comply with Hobby tier restrictions.
 
 ---
 
